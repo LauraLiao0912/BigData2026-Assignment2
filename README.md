@@ -132,3 +132,133 @@ week of 2026/09/27 – 10/04.
 The data used in this assignment is sourced from [GH Archive](https://www.gharchive.org), a
 publicly available archive of GitHub events. This assignment is intended for educational
 purposes within this course.
+
+
+---
+
+## Student Implementation: GitHub User Activity Prediction
+
+### 1. Project Overview
+
+This project predicts six GitHub user activities over a seven-day period using historical events from GH Archive.
+
+The six target activities are `open_pr`, `open_issue`, `issue_comment`, `pr_review`, `pr_review_comment`, and `push`.
+
+### 2. Data Source
+
+The dataset is obtained from **GH Archive**: https://www.gharchive.org/.
+
+The official `scripts/preprocess.py` is used to construct eight anonymized relational tables.
+
+The current experimental dataset covers October 25 to November 16, 2026 (Taiwan time, end exclusive), consisting of 528 hourly GH Archive files.
+
+Some upstream events, particularly PushEvent records, are missing. These missing events cannot be recovered from the permitted dataset.
+
+### 3. Environment Setup
+
+The project was developed using Python 3.14.
+
+Install dependencies:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+### 4. Data Preparation
+
+Download historical GH Archive files:
+
+```bash
+python scripts/download_data.py
+```
+
+Generate the eight relational tables using the official preprocessing script:
+
+```bash
+python scripts/preprocess.py --raw raw_data --out data
+```
+
+### 5. Feature Engineering
+
+Three feature groups are implemented:
+
+- **Historical Activity Features (22):** Activity counts over 1, 3, and 7 days, total activity counts, and recent activity indicators.
+- **Relational Features (4):** Repository participation, shared repository activity, and peer activity statistics.
+- **Temporal Features (18):** Activity recency, number of active days, and recent activity trends.
+
+Generate features and historical labels:
+
+```bash
+python build_labels.py
+python build_features.py
+python build_relational_features.py
+python build_temporal_features.py
+```
+
+### 6. Modeling and Experiments
+
+Two classification approaches are evaluated:
+
+- Logistic Regression
+- Random Forest
+
+The experiments compare four feature configurations: Baseline, Baseline + Relational, Baseline + Temporal, and Full Features.
+
+Training and validation are separated chronologically rather than randomly.
+
+The reported validation results are exploratory and may be affected by missing upstream events and repeated model selection on the same validation period.
+
+### 7. Reproduce the Experiments
+
+```bash
+python train_baseline.py
+python experiment_threshold.py
+python experiment_relational.py
+python experiment_full_ablation.py
+python experiment_random_forest.py
+```
+
+### 8. Generate Predictions
+
+The current prediction model uses Random Forest with 22 historical features and 18 temporal features.
+
+Run:
+
+```bash
+python train_final_model.py
+```
+
+This generates:
+
+```text
+results/output_draft.csv
+```
+
+Validate the output format:
+
+```bash
+python scripts/evaluate.py --pred results/output_draft.csv --input submission/test_input.csv
+```
+
+The current draft uses historical data available through November 16, 2026. It is a preliminary prediction file and must be reviewed before final submission.
+
+### 9. Current Experimental Results
+
+| Model | Features | Macro-F1 | Micro-F1 | Reference Score |
+|---|---:|---:|---:|---:|
+| Logistic Regression + Historical | 22 | 0.2458 | 0.2530 | 0.2494 |
+| Logistic Regression + Relational | 26 | 0.2491 | 0.2550 | 0.2521 |
+| Random Forest + Historical | 22 | 0.2631 | 0.2713 | 0.2672 |
+| Random Forest + Relational | 26 | 0.2672 | 0.2746 | 0.2709 |
+| Random Forest + Temporal | 40 | 0.2921 | 0.3005 | **0.2963** |
+| Random Forest + Full | 44 | 0.2893 | 0.2982 | 0.2938 |
+
+These scores were obtained on historical validation labels for November 8–15, 2026, and do not represent official test-week performance.
+
+### 10. Limitations
+
+- Missing GH Archive events may introduce label noise and temporal bias.
+- Some users have no observed activity history (cold-start problem).
+- First-observed object timestamps are not always equivalent to original event timestamps.
+- The model has been evaluated on a limited historical validation period.
+- Further temporal holdout testing is needed to assess generalization.

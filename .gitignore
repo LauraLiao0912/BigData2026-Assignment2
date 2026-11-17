@@ -1,0 +1,32 @@
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+
+# Large raw GH Archive data
+raw_data/
+
+# Generated datasets and features
+data/
+
+# Trained models and experiment outputs
+results/
+
+# Local inspection outputs
+inspection.txt
+activity_analysis.txt
+raw_event_check.txt
+label_analysis.txt
+feature_analysis.txt
+relational_analysis.txt
+relational_experiment_results.txt
+temporal_analysis.txt
+baseline_results.txt
+threshold_results.txt
+full_ablation_results.txt
+random_forest_results.txt
+final_model_results.txt
+
+# Temporary files
+*.part
