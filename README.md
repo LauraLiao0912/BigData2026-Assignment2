@@ -136,129 +136,113 @@ purposes within this course.
 
 ---
 
-## Student Implementation: GitHub User Activity Prediction
+## Student Implementation: Temporal Relation-Aware GNN
 
-### 1. Project Overview
+> This section documents the student's implementation. The course instructions above are retained for reference. The student's local validation results are **not** the official reference scores listed above.
 
-This project predicts six GitHub user activities over a seven-day period using historical events from GH Archive.
+### 1. Task, data source, and prediction period
 
-The six target activities are `open_pr`, `open_issue`, `issue_comment`, `pr_review`, `pr_review_comment`, and `push`.
+The project predicts six GitHub activities (`open_pr`, `open_issue`, `issue_comment`, `pr_review`, `pr_review_comment`, and `push`) for the 4,465 users listed in `submission/test_input.csv`.
 
-### 2. Data Source
+- **Source:** [GH Archive](https://www.gharchive.org/). All data are processed using the course-provided `scripts/preprocess.py`, which constructs eight anonymized relational tables.
+- **Historical archive:** 2026-08-16 00:00 to 2026-11-16 00:00 **Asia/Taipei** (end exclusive), corresponding to 2,208 hourly `.json.gz` files, 92 days and 199,081 cohort events identified by preprocessing.
+- **Target week:** 2026-11-22 00:00 to 2026-11-29 00:00 **Asia/Taipei** (end exclusive).
+- **Known limitation:** the current archive ends six days before the prediction cutoff. The pipeline does **not** invent events for the unobserved interval.
 
-The dataset is obtained from **GH Archive**: https://www.gharchive.org/.
+### 2. Relational graph construction
 
-The official `scripts/preprocess.py` is used to construct eight anonymized relational tables.
+The official tables are `Users`, `Repositories`, `PullRequests`, `Issues`, `IssueComments`, `PRReviews`, `PRReviewComments`, and `Pushes` (see `SCHEMA.md`). `build_gnn_graph.py` creates `torch_geometric.data.HeteroData` snapshots with:
 
-The current experimental dataset covers October 25 to November 16, 2026 (Taiwan time, end exclusive), consisting of 528 hourly GH Archive files.
+- Eight node types corresponding to these tables.
+- Sixteen selected foreign-key relation types and sixteen reverse relation types (**32 directed edge types**).
+- Snapshot-time filtering using each table's official row-time column, with strict `row_time < cutoff`.
+- Simple node features (a constant and normalized age since the observed row time), plus a saved UserID-to-node-index mapping for label alignment.
+- Selected relationships excluded conservatively where the linked value may reflect a later state (for example `merged_by_id` or `assignee_id`). This reduces but does **not** prove the absence of temporal leakage; remaining FK availability and approximate label definitions need review.
 
-Some upstream events, particularly PushEvent records, are missing. These missing events cannot be recovered from the permitted dataset.
+For the historical **2026-11-08** validation snapshot, the graph has **241,725 nodes** and **871,312 directed edges**. The **2026-11-16** snapshot has **247,143 nodes** and **890,162 directed edges**.
 
-### 3. Environment Setup
+### 3. Multiweek training and temporal information
 
-The project was developed using Python 3.14.
+`build_multiweek.py` produces seven weekly training cutoffs (`2026-09-20` through `2026-11-01`), one validation cutoff (`2026-11-08`), and a provisional feature snapshot (`2026-11-16`). All dates are interpreted in Taiwan time. Its 26 features comprise:
 
-Install dependencies:
+- Per-activity historical counts for **7 and 30 days** (12 features).
+- Per-activity **30-day recency** and **number of active days** (12 explicit temporal features).
+- Two 30-day repository participation / peer-count features.
 
-```bash
-python -m pip install -r requirements.txt
+The training set contains **31,255 user-week rows** (4,465 users across seven cutoffs), the validation set has **4,465 user rows**, and each has six binary activity labels. Labels are locally constructed approximations using observed event timestamps; due to missing upstream events and first-seen timing, these labels should not be treated as perfect ground truth. This work uses chronological splits rather than random splitting.
+
+### 4. Main model and ablation
+
+**Main model:** a two-layer relation-aware GNN implemented in `train_hetero_gnn_v2.py`. It uses learnable node-type embeddings and relation-conditioned message passing, and predicts six independent binary outcomes from User-node representations.
+
+- Loss: `BCEWithLogitsLoss` with training-only positive-class weights (capped at 15).
+- Optimizer: Adam; maximum 35 epochs; early stopping based on the historical validation score.
+- Decision threshold: 0.5 for each activity.
+- Missing User nodes at validation/prediction time: training-label prevalence fallback.
+- **Without explicit time encoding:** the same relation-aware GNN, but explicit node-age, recency, and active-days feature inputs are masked. Historical 7-/30-day counts remain, so this is **not** a completely time-agnostic model.
+- **With time encoding:** includes node age, activity recency, and active-days features.
+
+**Baseline:** `train_rf_multiweek_baseline.py` trains six Random Forest classifiers from the same multiweek tabular feature set and chronological splits. Its prediction inputs do not include graph edges. Thus, differences cannot be attributed solely to graph structure because model families and optimization methods also differ.
+
+### 5. Local validation results
+
+All values below are **exploratory historical validation results** for the target week **2026-11-08 to 2026-11-15 (Taiwan time)**. The same validation week has been used repeatedly during development, so the results are **not independent test performance**.
+
+| Model | Macro-F1 | Micro-F1 | Reference score `(Macro + Micro)/2` |
+|---|---:|---:|---:|
+| Random Forest, 7-week baseline | 0.345964 | 0.356119 | 0.351042 |
+| GNN V2, without explicit time | 0.335993 | 0.342958 | 0.339475 |
+| **GNN V2, with time** | **0.347465** | 0.354785 | **0.351125** |
+
+The with-time GNN scores slightly higher than its without-time ablation. Its difference relative to Random Forest is negligible (**0.000083** in the reference score), and this experiment does **not** establish a statistically meaningful GNN advantage. All models are evaluated on 4,465 validation users; the GNN uses a training-prevalence fallback for users absent from a graph snapshot.
+
+### 6. Reproduction on Windows (PowerShell)
+
+**Prerequisites:** Python 3.11 (the development environment used Python 3.11.9), enough disk space for the hourly archive, and optional NVIDIA CUDA GPU. The recorded experiment used PyTorch 2.11.0+cu128, PyTorch Geometric 2.8.1, and an RTX 5060 Ti. `requirements.txt` records the installed packages but CUDA wheels may require the corresponding PyTorch index URL.
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 4. Data Preparation
+For a compatible NVIDIA GPU, install/verify a CUDA-enabled PyTorch build via the [official PyTorch selector](https://pytorch.org/get-started/locally/); for the development setup, CUDA 12.8 wheels were installed using:
 
-Download historical GH Archive files:
-
-```bash
-python scripts/download_data.py
+```powershell
+.\.venv\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cu128
+.\.venv\Scripts\python.exe -m pip install torch_geometric
 ```
 
-Generate the eight relational tables using the official preprocessing script:
+Before downloading, verify that `scripts/download_data.py` specifies the UTC boundaries **2026-08-15 16:00 (inclusive)** to **2026-11-15 16:00 (exclusive)**. Then execute in this order from the repository root:
 
-```bash
-python scripts/preprocess.py --raw raw_data --out data
+```powershell
+.\.venv\Scripts\python.exe scripts\download_data.py
+.\.venv\Scripts\python.exe scripts\preprocess.py --raw raw_data --out data
+.\.venv\Scripts\python.exe build_multiweek.py
+.\.venv\Scripts\python.exe build_gnn_graph.py
+
+# Model training and historical validation:
+.\.venv\Scripts\python.exe train_rf_multiweek_baseline.py
+.\.venv\Scripts\python.exe train_hetero_gnn_v2.py
+
+# Target-week inference using the saved with-time GNN checkpoint:
+.\.venv\Scripts\python.exe predict_gnn.py
+
+# Official output format check:
+.\.venv\Scripts\python.exe scripts\evaluate.py --pred results\output_315706002_draft.csv --input submission\test_input.csv
 ```
 
-### 5. Feature Engineering
+`predict_gnn.py` builds a graph and feature representation at the **2026-11-22 prediction cutoff** using **only the available historical archive ending 2026-11-16**; it loads `results/gnn_v2_with_time.pt` and produces the draft CSV. The validated submission-named copy is `results/output_315706002.csv`. If regenerating it, copy the checked draft to that filename and run the same format check on the copy.
 
-Three feature groups are implemented:
+`data/`, `raw_data/`, `.venv/` and `results/` are intentionally excluded from Git. These files are generated locally, not supplied with this repository. To reproduce inference, the training checkpoint must first be regenerated with the training command above.
 
-- **Historical Activity Features (22):** Activity counts over 1, 3, and 7 days, total activity counts, and recent activity indicators.
-- **Relational Features (4):** Repository participation, shared repository activity, and peer activity statistics.
-- **Temporal Features (18):** Activity recency, number of active days, and recent activity trends.
+### 7. Limitations and integrity notes
 
-Generate features and historical labels:
+- **Upstream missingness:** GH Archive has missing or incomplete activity records, particularly for certain PushEvent periods; absent events may be mislabeled as negatives.
+- **Approximate labels:** this implementation does not claim to reconstruct all official ground-truth events exactly.
+- **Potential temporal leakage:** snapshot row-time checks are implemented, but the historical availability of every retained foreign-key value has not been proven. Historical temporal integrity must be audited before making strong causal or generalization claims.
+- **Cold-start users:** 71 users are missing from the 2026-11-08 validation graph; 70 from the target-cutoff graph. They receive the fixed training-prevalence fallback.
+- **Validation reuse:** model choices and stopping use the same historical validation week; an untouched holdout would provide stronger generalization evidence.
+- **Prediction staleness:** the source archive stops at 2026-11-16 even though the official target starts on 2026-11-22. No missing intervening events are backfilled.
 
-```bash
-python build_labels.py
-python build_features.py
-python build_relational_features.py
-python build_temporal_features.py
-```
-
-### 6. Modeling and Experiments
-
-Two classification approaches are evaluated:
-
-- Logistic Regression
-- Random Forest
-
-The experiments compare four feature configurations: Baseline, Baseline + Relational, Baseline + Temporal, and Full Features.
-
-Training and validation are separated chronologically rather than randomly.
-
-The reported validation results are exploratory and may be affected by missing upstream events and repeated model selection on the same validation period.
-
-### 7. Reproduce the Experiments
-
-```bash
-python train_baseline.py
-python experiment_threshold.py
-python experiment_relational.py
-python experiment_full_ablation.py
-python experiment_random_forest.py
-```
-
-### 8. Generate Predictions
-
-The current prediction model uses Random Forest with 22 historical features and 18 temporal features.
-
-Run:
-
-```bash
-python train_final_model.py
-```
-
-This generates:
-
-```text
-results/output_draft.csv
-```
-
-Validate the output format:
-
-```bash
-python scripts/evaluate.py --pred results/output_draft.csv --input submission/test_input.csv
-```
-
-The current draft uses historical data available through November 16, 2026. It is a preliminary prediction file and must be reviewed before final submission.
-
-### 9. Current Experimental Results
-
-| Model | Features | Macro-F1 | Micro-F1 | Reference Score |
-|---|---:|---:|---:|---:|
-| Logistic Regression + Historical | 22 | 0.2458 | 0.2530 | 0.2494 |
-| Logistic Regression + Relational | 26 | 0.2491 | 0.2550 | 0.2521 |
-| Random Forest + Historical | 22 | 0.2631 | 0.2713 | 0.2672 |
-| Random Forest + Relational | 26 | 0.2672 | 0.2746 | 0.2709 |
-| Random Forest + Temporal | 40 | 0.2921 | 0.3005 | **0.2963** |
-| Random Forest + Full | 44 | 0.2893 | 0.2982 | 0.2938 |
-
-These scores were obtained on historical validation labels for November 8–15, 2026, and do not represent official test-week performance.
-
-### 10. Limitations
-
-- Missing GH Archive events may introduce label noise and temporal bias.
-- Some users have no observed activity history (cold-start problem).
-- First-observed object timestamps are not always equivalent to original event timestamps.
-- The model has been evaluated on a limited historical validation period.
-- Further temporal holdout testing is needed to assess generalization.
+This implementation uses GH Archive for educational purposes. The instructor's reference scores above were obtained on a **different week** and should not be read as directly comparable with the student's validation scores.

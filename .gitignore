@@ -32,3 +32,14 @@ final_model_results.txt
 *.part
 
 data_22days/
+
+
+# Generated logs
+*_results.txt
+graph_results.txt
+graph_snapshots_results.txt
+gnn_training_results.txt
+gnn_prediction_results.txt
+
+# Old local dataset
+data_22days/
