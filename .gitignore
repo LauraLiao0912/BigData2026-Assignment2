@@ -30,3 +30,5 @@ final_model_results.txt
 
 # Temporary files
 *.part
+
+data_22days/

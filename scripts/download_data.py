@@ -4,10 +4,10 @@ from pathlib import Path
 import subprocess
 import gzip
 
-# Taiwan: 2026/10/25 00:00 ~ 2026/11/16 00:00
-# GH Archive uses UTC.
+# Historical data: 2026/08/16 - 2026/11/16
+# Taiwan Time (UTC+8)
 
-start = datetime(2026, 10, 24, 16, tzinfo=timezone.utc)
+start = datetime(2026, 8, 15, 16, tzinfo=timezone.utc)
 end = datetime(2026, 11, 15, 16, tzinfo=timezone.utc)
 
 output_dir = Path("raw_data")

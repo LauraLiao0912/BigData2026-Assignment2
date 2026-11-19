@@ -1,0 +1,39 @@
+open_pr 17522
+open_issue 16562
+issue_comment 16092
+pr_review 13136
+pr_review_comment 10358
+push 100307
+Building train week: 2026-09-20
+Building train week: 2026-09-27
+Building train week: 2026-10-04
+Building train week: 2026-10-11
+Building train week: 2026-10-18
+Building train week: 2026-10-25
+Building train week: 2026-11-01
+
+=== Dataset Summary ===
+Train (31255, 34)
+Missing values: 0
+Validation (4465, 34)
+Missing values: 0
+Final (4465, 28)
+Missing values: 0
+
+Training label distribution:
+open_pr               2907
+open_issue            1632
+issue_comment         2012
+pr_review             2054
+pr_review_comment     1233
+push                 12111
+
+Validation label distribution:
+open_pr              320
+open_issue           172
+issue_comment        197
+pr_review            222
+pr_review_comment     66
+push                 261
+
+Completed.
