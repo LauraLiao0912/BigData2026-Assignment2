@@ -1,15 +1,18 @@
 
 # Question 1: Database Schema Graph
 
+
 ## Dataset
 
-- Source: GH Archive
-- Historical period (Taiwan time):
-  2026/10/25 00:00 – 2026/11/16 00:00
-- Historical period (UTC):
-  2026/10/24 16:00 – 2026/11/15 16:00
-- Total tables: 8
-- Total observed cohort events: 14,113
+- **Source:** GH Archive
+- **Historical period (Taiwan time):** 2026/08/16 00:00 – 2026/11/16 00:00 (end exclusive)
+- **Historical period (UTC):** 2026/08/15 16:00 – 2026/11/15 16:00 (end exclusive)
+- **Duration:** 92 days (2,208 hourly files)
+- **Total observed cohort events:** 199,081
+- **Relational tables:** 8
+- **Schema foreign keys:** 20
+- **GNN relations:** 16 forward relations and 16 reverse relations
+
 
 ## Schema Graph
 
